@@ -1,0 +1,322 @@
+---
+title: "R Project"
+author: "Arjun M,Mahesh D,Ruthwik HM"
+date: "16/10/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+First we load the required dataset.
+```{r}
+library(readr)
+df <- read_csv('NBA_PLAYERS.csv')
+```
+
+We can now view the dataset.
+```{r}
+View(df)
+```
+
+To check the number of columns and type of data in each column we can use structure function.
+```{r}
+str(df)
+```
+
+We can check if any of the columns has any missing data or NA values with the following code.
+```{r}
+unique_elements = lapply(df,unique)
+lapply(lapply(unique_elements,is.na),sum)
+```
+
+Now we see that 4 columns have missing data.These 4 columns are actually those containing data about last years statistics .Since in our analysis we are not making any comparisons based on time series we can drop these columns.
+```{r}
+df$PPG_LAST_SEASON = NULL
+df$APG_LAST_SEASON = NULL
+df$RPG_LAST_SEASON = NULL
+df$PER_LAST_SEASON = NULL
+```
+
+Now we check if the age column has any non numeric data and replace it with the mean player age
+```{r}
+unique(df$AGE)
+df$AGE[df$AGE == '-'] = 0
+df$AGE = sapply(df$AGE,as.numeric)
+mean_age = mean(df$AGE)
+df$AGE[df$AGE == 0] = round(mean_age)
+```
+
+Now we also see that the Salary column has a value which says "not signed".This means that the particular player does not have a contract yet ,hence we replace his salary with 0.
+```{r}
+unique(df$SALARY)
+df$SALARY[df$SALARY == "Not signed"] = "0"
+df$SALARY = as.numeric(gsub(",", "", df$SALARY))
+df$COLLEGE[grep("-",df$COLLEGE)] = "Others"
+```
+
+We will not be using the URL column as it has some external links.We can drop it.
+```{r}
+df$URL = NULL
+```
+
+We see that the columns FGM_FGA(Field goals made vs Field goals attempted) has data as a string with yphens.We are interested to know the ration of these numbers in the column.This ratio is directly indicated in the FGP(Field goal percentage).Similarly THM_THA and FTM_FTA can be represented by THP and FTP.Now since we have columns with required ratios we can drop redundant columns.
+```{r}
+df$FTM_FTA = NULL
+df$FGM_FGA = NULL
+df$THM_THA = NULL
+```
+
+Since the ppg ,apg are redundant with columns representing same statistics exist for  career.
+```{r}
+df$PPG = NULL
+df$APG = NULL
+```
+
+Player with the maximum Salary(considering only the players who have revealed their salary to ESPN).
+```{r}
+df$NAME[df$SALARY == max(df$SALARY)]
+```
+
+Calculating count of players based on the given grouping
+```{r,echo=FALSE}
+e = sort(df$EXPERIENCE)
+e = as.data.frame(table(e))
+labels = c('0-3 years', '3-5 years','5-8 years',  '8-10 years', '10-15 years', 'more than 15 years')
+experience <- e$Freq
+ex = vector(mode = "numeric",length(labels))
+ex[1] = experience[1] + experience[2] + experience[3]
+ex[2] = experience[4] + experience[5]
+ex[3] = experience[6] + experience[7] + experience[8]
+ex[4] = experience[9] + experience[10]
+ex[5] = experience[11] + experience[12] + experience[13] + experience[14] + experience[15] + experience[16]
+ex[6] = experience[17] + experience[18] + experience[19]
+```
+
+Plot of distribution of experience in the league
+```{r}
+library("plotly")
+plot_ly(df[,3], labels = labels, values = ex, type = 'pie') %>%
+        layout(title = 'Experience of players in the NBA as of 2018-2019',
+        xaxis = list(showgrid = FALSE, zeroline = FALSE),
+        yaxis = list(showgrid = FALSE, zeroline = FALSE))
+```
+From the above pie chart we can see that majority of the players are fairly young having very little experience playing in the league.We can also see that there are very few players who have been in the league for more than 15 years.
+
+Calculating the number of players in the league based on college they attended.
+```{r}
+c = sort(df$COLLEGE)
+c = as.data.frame(table(c))
+colnames(c) = c("College","Frequency")
+#c = c[ -c(1),]
+is_applicable = vector()
+for (i in 1:length(c$Frequency)) {
+  if ( c$Frequency[i] > 8)
+    is_applicable[i] = TRUE
+  else
+    is_applicable[i] = FALSE
+}
+colors = vector(mode = "character",length = 30)
+for (i in 1:length(c$Frequency)) {
+  if ( is_applicable[i])
+    colors[i] = "rgba(0,255,0,0.7)"
+  else
+    colors[i] = "rgba(255,0,0,0.7)"
+}
+```
+Plot of number of players vs university attended
+```{r}
+p = plot_ly(x = ~c$College,y = c$Frequency,marker = list(color = colors))
+p = layout(p,title = "Number Of Players vs University Attended",xaxis = list(title = "University",type = "category"),yaxis = list(title = "Frequency"))
+p
+```
+From the above plot,we can see that most of the players in the may not have attended college in the USA.The University of Kentucky has the most NBA players among the universities situated in the USA.
+
+Calculating and plotting gross salary per team in the NBA for the 2018-19 season
+```{r}
+team_gross_salary = tapply(df$SALARY, df$TEAM, sum)
+teams = unique(df$TEAM)
+sal_cap = 101900000
+sals = data.frame(teams,team_gross_salary)
+colnames(sals) = c("Team","Gross Salary")
+is_applicable = vector()
+for (i in 1:length(team_gross_salary)) {
+  if ( team_gross_salary[i] > sal_cap)
+    is_applicable[i] = TRUE
+  else
+    is_applicable[i] = FALSE
+}
+colors = vector(mode = "character",length = 30)
+for (i in 1:length(team_gross_salary)) {
+  if ( is_applicable[i])
+    colors[i] = "rgba(255,0,0,0.7)"
+  else
+    colors[i] = "rgba(0,255,0,0.7)"
+}
+hline <- function(y,color = "black") {
+  list(
+    type = "line", 
+    name = "NBA 2018-19 Salary Cap",
+    x0 = 0, 
+    x1 = 1, 
+    xref = "paper",
+    y0 = y, 
+    y1 = y, 
+    line = list(color = color)
+  )
+}
+p <- plot_ly(sals,x = ~teams,y = ~team_gross_salary,type = "bar" ,marker = list(color = colors))
+p = layout(p,title = "Gross Salary per team",xaxis = list(title = "Teams"),yaxis = list(title = "Gross Salary"))
+p <- layout(p,shapes = list(hline(sal_cap)))
+p
+```
+From the above plot,we can see that majority of the teams have exceeded the NBA salary cap and do not have much cap space to sign new players.
+
+```{r}
+nba_mean_age = mean(df$AGE)
+team_mean_age = tapply(df$AGE, df$TEAM, mean)
+ages = data.frame(teams,team_mean_age)
+colnames(sals) = c("Team","Team Mean Age")
+is_applicable = vector()
+for (i in 1:length(team_mean_age)) {
+  if ( team_mean_age[i] > nba_mean_age)
+    is_applicable[i] = TRUE
+  else
+    is_applicable[i] = FALSE
+}
+colors = vector(mode = "character",length = 30)
+for (i in 1:length(team_mean_age)) {
+  if ( is_applicable[i])
+    colors[i] = "rgba(255,0,0,0.7)"
+  else
+    colors[i] = "rgba(0,255,0,0.7)"
+}
+hline <- function(y,color = "blue") {
+  list(
+    type = "line", 
+    title = "NBA 2018-19 Mean Age",
+    name = "NBA 2018-19 Mean Age",
+    x0 = 0, 
+    x1 = 1, 
+    xref = "paper",
+    y0 = y, 
+    y1 = y, 
+    line = list(color = color)
+  )
+}
+p <- plot_ly(ages,x = ~teams,y = ~team_mean_age,type = "bar" ,marker = list(color = colors))
+p = layout(p,title = "Mean Age of players per team",xaxis = list(title = "Teams"),yaxis = list(title = "Mean Age"))
+p <- layout(p,shapes = list(hline(nba_mean_age)))
+p
+```
+From the above plot,we can see that the mean player age of majority of the teams is less than the league's mean player age.
+
+Calculating top earner from each team
+```{r}
+#install.packages("dplyr")
+library("dplyr")
+max_sal = function(group){
+  group[which.max(group)]
+}
+top_earners = group_by(df)
+top_earners = top_earners[order(top_earners$TEAM),]
+sals = as.data.frame(tapply(top_earners$SALARY,top_earners$TEAM,max_sal))
+colnames(sals) = c("MaxSalary")
+top_earners = top_earners %>% filter(SALARY %in% sals$MaxSalary)
+top_earners = top_earners[-c(8,17,18,24),]
+pos = unique(top_earners$POSITION)
+counts = count(top_earners,top_earners$POSITION)
+colnames(counts) = c("Position","No of Players")
+colors = c("rgb(150, 50, 180)","rgb(255, 127, 14)","rgb(44, 160, 44)","rgb(214, 39, 40)","rgb(140, 86, 75)")
+```
+Plotting top earner vs position played
+```{r}
+p = plot_ly(counts,x = ~pos,y = ~counts$`No of Players`,type = "bar",marker = list(color = colors ))
+p = layout(p,title = "Distribution of positions of top earners in the NBA",xaxis = list(title = "Position"),yaxis = list(title = "Number of Players"))
+p
+```
+We can see that the league has quite a few high earning players who are Power Forwards and Small Forwards.
+
+To check the correlation between the columns we have to drop the non numeric columns.
+```{r}
+a = df
+a$TEAM = NULL
+a$NAME = NULL
+a$COLLEGE = NULL
+a$POSITION = NULL
+```
+
+Constructing a correlation plot and a correlation matrix to check the and visualize correlation.
+```{r}
+#install.packages("corrplot")
+library("corrplot")
+Matrix = cor(a)
+corrplot(Matrix,method = "circle")
+```
+
+To check How salary depends on other columns we check the columns having a correlation of more than 0.6.
+```{r}
+Matrix[5,] > 0.6
+```
+
+Splitting the data into 70% training and 30% test data.
+```{r}
+train <- df[1:440,]
+test <- df[440:550,]
+```
+
+We see that the columns PPG_career , MPG, STLPG,TOPG AFFECT THE sALARY.
+```{r}
+model <- lm(SALARY~ PPG_CAREER+MPG+STLPG+TOPG,data = train)
+summary(model)
+```
+Having constructed a linear model with the following variables affecting the salary attribute, we see that the r-squared is not very high indicating the model is not the best we can arrive at(correlation does not mean or indicate causation).
+Howevever intuitively we see that the number of games played by a player has to affect the salary he receives.
+```{r}
+model <- lm(SALARY~ PPG_CAREER+MPG+STLPG+TOPG+GP,data = train)
+summary(model)
+```
+We now see that adding the GP as one of the factors for the salary attribute,increases the r-squared indicating that the model is a better fit .Also we see that p-value indicated here is very very low.This means that the p-value is statistically significant at a confidence level of 99% also.This means we can reject the null hypothesis that the given attributes do not affect the salary of the player.Basically we can assume that there is a correlation between the salary  and the above fields.
+
+Calculating the correlation accuracy for the model 
+```{r}
+predicted1 <- predict(model,test)
+act_pred1 <- data.frame(cbind(actuals = test$SALARY,predict = predicted1))
+cor_acc <- cor(act_pred1)
+print(paste0("Correlation accuracy=",cor_acc[1,2]))
+```
+We see that the correlation accuracy is 70.6% which is is not very good but reasonable.
+
+Plotting the residuals vs Fitted values and also the normal Q-Q plot to check the variance ,linear relationship and the normality of residuals.
+```{r}
+par(mfrow = c(2, 2))
+plot(model)
+```
+We see that in the residuals plot the line at 0 is not linear exactly showing there does not completely exist a linear relationship for the linear regression model we have made.However considerinng most part of it as linear we observe heteroscedasticity as there is unequal variance on both sides of the line.The Q-Q plot actually shows a reasonable fit showing the residuals distribution to be almost normal.
+Hence we can conclude, that the model we have coctructed is not a very good estimator of the players' salary as a linear model is not sufficient in this case.
+
+Constructing another model to predict the games played by a player in his career based on his age and experience.
+```{r}
+model2 <- lm(GP~EXPERIENCE+AGE,data = train)
+summary(model)
+```
+We now see that the r-squaredis very high (.971) indicating that the model is a very good  fit .Also we see that p-value indicated here is very very low.This means that the p-value is statistically significant at a confidence level of 99% also.This means we can reject the null hypothesis that the given attributes do not affect the games played by  the player.Basically we can assume that there is a strong correlation between the games played and the above fields.
+
+Calculating the correlation accuracy for the model
+```{r}
+predicted2 <- predict(model2,test)
+act_pred2 <- data.frame(cbind(actuals = test$GP,predict = predicted2))
+cor_acc2 <- cor(act_pred2)
+print(paste0("Correlation accuracy=",cor_acc2[1,2]))
+```
+The correlation accuracy is approx 98% which indicates the model is a very good fit.
+
+Plotting the residuals vs Fitted values and also the normal Q-Q plot to check the variance ,linear relationship and the normality of residuals for the second model.
+
+```{r}
+par(mfrow = c(2, 2))
+plot(model2)
+```
+Now we see that residuals vs fitted values is slightly better showing a homoscedastic relationship and the Q-Q plot shows almost a normal distribution.
+
+In conclusion the second model constructed to predict the Games played is a better fit and a decent model with high accuracy.

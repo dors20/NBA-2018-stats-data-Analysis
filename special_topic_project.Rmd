@@ -1,0 +1,166 @@
+---
+title: "R Notebook for special topic project"
+output: html_notebook
+Author:Arjun M
+---
+
+First we load the required dataset.
+```{r}
+library(readr)
+df <- read_csv('NBA_Players.CSV')
+```
+
+We can now view the dataset.
+```{r}
+View(df)
+```
+
+To check the number of columns and type of data in each column we can use structure function.
+```{r}
+str(df)
+```
+
+We can check if any of the columns has any missing data or NA values with the following code.
+```{r}
+unique_elements = lapply(df,unique)
+lapply(lapply(unique_elements,is.na),sum)
+```
+
+Now we see that 4 columns have missing data.These 4 columns are actually those containing data about last years statistics .Since in our analysis we are not making any comparisons based on time series we can drop these columns.
+```{r}
+df$PPG_LAST_SEASON = NULL
+df$APG_LAST_SEASON = NULL
+df$RPG_LAST_SEASON = NULL
+df$PER_LAST_SEASON = NULL
+```
+
+Now we check if the age column has any non numeric data and replace it with the mean player age
+```{r}
+unique(df$AGE)
+df$AGE[df$AGE == '-'] = 0
+df$AGE=sapply(df$AGE,as.numeric)
+mean_age = mean(df$AGE)
+df$AGE[df$AGE == 0] = round(mean_age)
+```
+
+Now we also see that the Salary column has a value which says "not signed".This means that the particular player does not have a contract yet ,hence we replace his salary with 0.
+```{r}
+unique(df$SALARY)
+df$SALARY[df$SALARY == "Not signed"] = "0"
+df$SALARY = as.numeric(gsub(",", "", df$SALARY))
+```
+
+We will not be using the URL column as it has some external links.We can drop it.
+```{r}
+df$URL = NULL
+```
+
+We see that the columns FGM_FGA(Field goals made vs Field goals attempted) has data as a string with yphens.We are interested to know the ration of these numbers in the column.This ratio is directly indicated in the FGP(Field goal percentage).Similarly THM_THA and FTM_FTA can be represented by THP and FTP.Now since we have columns with required ratios we can drop redundant columns.
+```{r}
+df$FTM_FTA = NULL
+df$FGM_FGA = NULL
+df$THM_THA = NULL
+```
+
+Since the ppg ,apg are redundant with columns representing same statistics exist for  career.
+```{r}
+df$PPG = NULL
+df$APG = NULL
+```
+
+Player with the maximum Salary(considering only the players who have revealed their salary to ESPN).
+```{r}
+ df$NAME[df$SALARY == max(df$SALARY)]
+```
+
+```{r}
+
+```
+
+To check the correlation between the columns we have to drop the non numeric columns.
+```{r}
+a = df
+a$TEAM = NULL
+a$NAME = NULL
+a$COLLEGE = NULL
+a$POSITION= NULL
+```
+
+Constructing a correlation plot and a correlation matrix to check the and visualize correlation.
+```{r}
+install.packages("corrplot")
+library("corrplot")
+Matrix = cor(a)
+corrplot(Matrix,method = "circle")
+```
+
+To check How salary depends on other columns we check the columns having a correlation of more than 0.6.
+```{r}
+Matrix[5,] > 0.6
+```
+
+Splitting the data into 70% training and 30% test data.
+```{r}
+train<-df[1:440,]
+test<-df[440:550,]
+```
+
+We see that the columns PPG_career , MPG, STLPG,TOPG AFFECT THE sALARY.
+```{r}
+model<-lm(SALARY~ PPG_CAREER+MPG+STLPG+TOPG,data = train)
+summary(model)
+```
+Having constructed a linear model with the following variables affecting the salary attribute, we see that the r-squared is not very high indicating the model is not the best we can arrive at(correlation does not mean or indicate causation).
+Howevever intuitively we see that the number of games played by a player has to affect the salary he receives.
+```{r}
+model<-lm(SALARY~ PPG_CAREER+MPG+STLPG+TOPG+GP,data = train)
+summary(model)
+```
+We now see that adding the GP as one of the affctors for the salary attribute,increases the r-squared indicating that the model is a better fit .Also we see that p-value indicated here is very very low.This means that the p-value is statistically significant at a confidence level of 99% also.This means we can reject the null hypothesis that the given attributes do not affect the salary of the player.Basically we can assume that there is a correlation between the salary  and the above fields.
+
+Calculating the correlation accuracy for the model 
+```{r}
+predicted1<-predict(model,test)
+act_pred1<-data.frame(cbind(actuals=test$SALARY,predict=predicted1))
+cor_acc<-cor(act_pred)
+print(paste0("Correlation accuracy=",cor_acc[1,2]))
+```
+We see that the correlation accuracy is 70.6% which is is not very good but reasonable.
+
+Plotting the residuals vs Fitted values and also the normal Q-Q plot to check the variance ,linear relationship and the normality of residuals.
+```{r}
+par(mfrow = c(2, 2))
+plot(model)
+```
+We see that , in the residuals plot the line at 0 is not linear exactly showing there does not completely exist a linear relationship for the linear regression model we have made.However considerinng most part of it as linear we observe heteroscedasticity as there is unequal variance on both sides of the line.The Q-Q plot actually shows a reasonable fit showing the residuals distribution to be almost normal.
+Hence we can conclude, that the model we have coctructed is not a very good estimator of the players' salary as a linear model is not sufficient in this case.
+
+Constructing another model topredict the games played by a player in his career based on his age and experience.
+```{r}
+model2<-lm(GP~EXPERIENCE+AGE,data = train)
+summary(model)
+```
+We now see that the r-squaredis very high (.971) indicating that the model is a very good  fit .Also we see that p-value indicated here is very very low.This means that the p-value is statistically significant at a confidence level of 99% also.This means we can reject the null hypothesis that the given attributes do not affect the Games played by  the player.Basically we can assume that there is a strong correlation between the games played   and the above fields.
+
+Calculating the correlation accuracy for the model
+```{r}
+predicted2<-predict(model2,test)
+act_pred2<-data.frame(cbind(actuals=test$GP,predict=predicted2))
+cor_acc2<-cor(act_pred2)
+print(paste0("Correlation accuracy=",cor_acc2[1,2]))
+```
+The correlation accuracy is approx 98% which indicates the model is a very good fit.
+
+Plotting the residuals vs Fitted values and also the normal Q-Q plot to check the variance ,linear relationship and the normality of residuals for the second model.
+
+```{r}
+par(mfrow = c(2, 2))
+plot(model2)
+```
+Now we see that residuals vs fitted values is slightly better showing a homoscedastic relationship and the Q-Q plot shows almost a normal distribution.
+
+In conclusion The second model constructed to predict the Games played is a better fit and a decent model with high accuracy.
+
+
+
+
